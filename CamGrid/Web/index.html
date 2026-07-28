@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+  <meta name="theme-color" content="#111111">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>CamGrid</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bar-height: 44px;
+      --gap: 6px;
+      --bg: #0e0f10;
+      --panel: #1a1b1d;
+      --panel-2: #232427;
+      --border: #34363a;
+      --text: #f1f1f1;
+      --muted: #a7a9ad;
+      --faint: #686b70;
+      --accent: #169de0;
+      --good: #49b85c;
+      --bad: #c85b5b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #toolbar {
+      height: var(--bar-height);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    #toolbar strong {
+      margin-right: 4px;
+    }
+
+    button,
+    select {
+      height: 30px;
+      border: 1px solid #44474c;
+      border-radius: 5px;
+      background: #292b2f;
+      color: var(--text);
+      padding: 0 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    button:hover,
+    select:hover {
+      border-color: #64676d;
+      background: #33363a;
+    }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+
+    .spacer {
+      flex: 1;
+    }
+
+    #status {
+      color: var(--muted);
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #grid {
+      height: calc(100% - var(--bar-height));
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+      gap: var(--gap);
+      padding: var(--gap);
+    }
+
+    .camera {
+      min-width: 0;
+      min-height: 0;
+      position: relative;
+      overflow: hidden;
+      background: #111;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+
+    .camera.reachable {
+      border-color: rgba(73, 184, 92, 0.65);
+    }
+
+    .camera.unreachable {
+      border-color: rgba(200, 91, 91, 0.7);
+    }
+
+    .camera-header {
+      position: absolute;
+      z-index: 4;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 6px;
+      background: rgba(20, 21, 23, 0.97);
+      border-bottom: 1px solid #33363a;
+      transition: opacity 150ms ease;
+    }
+
+    .camera.hide-header .camera-header {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .camera:hover .camera-header {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .camera-label {
+      width: 72px;
+      flex: 0 0 72px;
+      height: 26px;
+      border: 1px solid #44474c;
+      border-radius: 4px;
+      background: #111214;
+      color: var(--text);
+      padding: 0 7px;
+      font: 12px system-ui, sans-serif;
+    }
+
+    .camera-url {
+      min-width: 0;
+      flex: 1;
+      height: 26px;
+      border: 1px solid #44474c;
+      border-radius: 4px;
+      background: #111214;
+      color: var(--text);
+      padding: 0 7px;
+      font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .camera-header button {
+      height: 26px;
+      padding: 0 8px;
+      font-size: 12px;
+    }
+
+    iframe {
+      position: absolute;
+      z-index: 1;
+      inset: 34px 0 0 0;
+      width: 100%;
+      height: calc(100% - 34px);
+      border: 0;
+      background: #0f1012;
+    }
+
+    .camera.hide-header iframe {
+      inset: 0;
+      height: 100%;
+    }
+
+    .placeholder {
+      position: absolute;
+      z-index: 3;
+      inset: 34px 0 0 0;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 50% 35%, #2a2c2f 0%, #1d1f22 42%, #17181a 100%);
+      color: var(--muted);
+      text-align: center;
+      padding: 24px;
+      transition: opacity 140ms ease;
+    }
+
+    .camera.hide-header .placeholder {
+      inset: 0;
+    }
+
+    .placeholder.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .placeholder-card {
+      max-width: 420px;
+      display: grid;
+      justify-items: center;
+      gap: 9px;
+    }
+
+    .placeholder-icon {
+      width: 58px;
+      height: 58px;
+      display: grid;
+      place-items: center;
+      border: 2px solid #66696f;
+      border-radius: 50%;
+      color: #777a80;
+      font-size: 30px;
+      line-height: 1;
+    }
+
+    .placeholder-title {
+      color: #c5c7ca;
+      font-size: 17px;
+      font-weight: 600;
+    }
+
+    .placeholder-address {
+      color: #85888e;
+      font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      overflow-wrap: anywhere;
+    }
+
+    .placeholder-note {
+      color: #6f7277;
+      font-size: 12px;
+    }
+
+    .placeholder-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 5px;
+    }
+
+    .placeholder-actions button {
+      height: 32px;
+      font-size: 13px;
+    }
+
+    .status-dot {
+      width: 9px;
+      height: 9px;
+      flex: 0 0 9px;
+      border-radius: 50%;
+      background: #686b70;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, .08);
+    }
+
+    .reachable .status-dot {
+      background: var(--good);
+    }
+
+    .unreachable .status-dot {
+      background: var(--bad);
+    }
+
+    .status-dot.beat {
+      animation: heartbeat 420ms ease-out;
+    }
+
+    @keyframes heartbeat {
+      0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(73, 184, 92, .65);
+      }
+
+      45% {
+        transform: scale(1.55);
+        box-shadow: 0 0 0 7px rgba(73, 184, 92, .15);
+      }
+
+      100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 12px rgba(73, 184, 92, 0);
+      }
+    }
+
+    body.single #grid {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr;
+    }
+
+    body.single .camera:not(.active) {
+      display: none;
+    }
+
+    @media (max-width: 1000px) {
+      #status {
+        display: none;
+      }
+
+      #toolbar strong {
+        display: none;
+      }
+
+      .camera-label {
+        display: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="toolbar">
+    <strong>Camera Grid</strong>
+
+    <select id="layout" title="Layout">
+      <option value="quad">2 × 2 grid</option>
+      <option value="single">Single camera</option>
+    </select>
+
+    <select id="singleCamera" title="Camera shown in single-camera mode">
+      <option value="0">A Cam</option>
+      <option value="1">B Cam</option>
+      <option value="2">C Cam</option>
+      <option value="3">D Cam</option>
+    </select>
+
+    <button id="reloadAll">Reload all</button>
+    <button id="checkAll">Check all</button>
+    <button id="toggleHeaders">Hide controls</button>
+    <button id="fullscreen" class="primary">Fullscreen</button>
+
+    <div class="spacer"></div>
+    <div id="status">Addresses and labels are saved in this browser.</div>
+  </div>
+
+  <main id="grid"></main>
+
+  <script>
+    const DEFAULT_CAMERAS = [
+      { label: "A Cam", url: "http://10.10.1.21/webremote.html" },
+      { label: "B Cam", url: "http://10.10.1.22/webremote.html" },
+      { label: "C Cam", url: "http://10.10.1.23/webremote.html" },
+      { label: "D Cam", url: "http://10.10.1.24/webremote.html" }
+    ];
+
+    const STORAGE_KEY = "camera-grid-v2";
+    const UI_STORAGE_KEY = "camera-grid-ui-v1";
+    const CHECK_TIMEOUT_MS = 3500;
+    const HEARTBEAT_INTERVAL_MS = 2000;
+
+    const grid = document.getElementById("grid");
+    const layoutSelect = document.getElementById("layout");
+    const singleCameraSelect = document.getElementById("singleCamera");
+    const toggleHeadersButton = document.getElementById("toggleHeaders");
+    const statusText = document.getElementById("status");
+
+    function normalizeUrl(value) {
+      let url = value.trim();
+      if (!url) return "about:blank";
+      if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) url = "http://" + url;
+      return url;
+    }
+
+    function loadSavedCameras() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        if (Array.isArray(saved) && saved.length === 4) return saved;
+      } catch (_) { }
+      return DEFAULT_CAMERAS;
+    }
+
+    function saveCameras() {
+      const cameras = [...document.querySelectorAll(".camera")].map(panel => ({
+        label: panel.querySelector(".camera-label").value.trim(),
+        url: normalizeUrl(panel.querySelector(".camera-url").value)
+      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cameras));
+      statusText.textContent = "Saved.";
+      setTimeout(() => {
+        statusText.textContent = "Addresses and labels are saved in this browser.";
+      }, 900);
+    }
+
+
+    function updateCameraDropdown() {
+      document.querySelectorAll(".camera").forEach((panel, index) => {
+        const label = panel.querySelector(".camera-label").value.trim() || `Camera ${index + 1}`;
+        const option = singleCameraSelect.querySelector(`option[value="${index}"]`);
+        if (option) option.textContent = label;
+      });
+    }
+
+    function loadUiState() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(UI_STORAGE_KEY));
+        return saved && typeof saved === "object" ? saved : {};
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function saveUiState() {
+      localStorage.setItem(UI_STORAGE_KEY, JSON.stringify({
+        layout: layoutSelect.value,
+        singleCamera: singleCameraSelect.value,
+        headersHidden
+      }));
+    }
+
+    function pulseHeartbeat(panel) {
+      const dot = panel.querySelector(".status-dot");
+      dot.classList.remove("beat");
+      void dot.offsetWidth;
+      dot.classList.add("beat");
+    }
+
+    async function heartbeat(panel) {
+      const url = normalizeUrl(panel.querySelector(".camera-url").value);
+      if (url === "about:blank") return;
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
+
+      try {
+        await fetch(url, {
+          mode: "no-cors",
+          cache: "no-store",
+          signal: controller.signal
+        });
+        clearTimeout(timer);
+        panel.classList.remove("unreachable");
+        panel.classList.add("reachable");
+        pulseHeartbeat(panel);
+      } catch (_) {
+        clearTimeout(timer);
+        panel.classList.remove("reachable");
+        panel.classList.add("unreachable");
+      }
+    }
+
+    async function checkReachability(panel, showLoading = true) {
+      const input = panel.querySelector(".camera-url");
+      const placeholder = panel.querySelector(".placeholder");
+      const title = panel.querySelector(".placeholder-title");
+      const note = panel.querySelector(".placeholder-note");
+      const address = panel.querySelector(".placeholder-address");
+      const url = normalizeUrl(input.value);
+
+      panel.classList.remove("reachable", "unreachable");
+      placeholder.classList.remove("hidden");
+      address.textContent = url;
+
+      if (showLoading) {
+        title.textContent = "Checking camera…";
+        note.textContent = "Trying the address on your local network.";
+      }
+
+      if (url === "about:blank") {
+        panel.classList.add("unreachable");
+        title.textContent = "No camera address";
+        note.textContent = "Enter an address above, then press Go.";
+        return false;
+      }
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
+
+      try {
+        await fetch(url, {
+          mode: "no-cors",
+          cache: "no-store",
+          signal: controller.signal
+        });
+
+        clearTimeout(timer);
+        panel.classList.add("reachable");
+        title.textContent = "Camera connected";
+        note.textContent = "Loading the web remote…";
+
+        // Give the iframe a moment to paint before removing the overlay.
+        setTimeout(() => placeholder.classList.add("hidden"), 250);
+        return true;
+      } catch (error) {
+        clearTimeout(timer);
+        panel.classList.add("unreachable");
+        title.textContent = "No camera connected";
+        note.textContent = "The address did not respond. It may be offline or not on this network.";
+        return false;
+      }
+    }
+
+    function createCamera(camera, index) {
+      const panel = document.createElement("section");
+      panel.className = "camera";
+      panel.dataset.index = index;
+
+      const header = document.createElement("div");
+      header.className = "camera-header";
+
+      const dot = document.createElement("span");
+      dot.className = "status-dot";
+      dot.title = "Connection status";
+
+      const labelInput = document.createElement("input");
+      labelInput.className = "camera-label";
+      labelInput.value = camera.label || `Camera ${index + 1}`;
+      labelInput.setAttribute("aria-label", `Camera ${index + 1} label`);
+
+      const urlInput = document.createElement("input");
+      urlInput.className = "camera-url";
+      urlInput.value = camera.url;
+      urlInput.setAttribute("aria-label", `Camera ${index + 1} URL`);
+
+      const go = document.createElement("button");
+      go.textContent = "Go";
+
+      const reload = document.createElement("button");
+      reload.textContent = "↻";
+      reload.title = "Reload and check";
+
+      const open = document.createElement("button");
+      open.textContent = "↗";
+      open.title = "Open in its own tab";
+
+      const frame = document.createElement("iframe");
+      frame.title = `Camera ${index + 1}`;
+      frame.allow = "fullscreen";
+      frame.referrerPolicy = "no-referrer";
+
+      const placeholder = document.createElement("div");
+      placeholder.className = "placeholder";
+      placeholder.innerHTML = `
+        <div class="placeholder-card">
+          <div class="placeholder-icon">⌁</div>
+          <div class="placeholder-title">Checking camera…</div>
+          <div class="placeholder-address"></div>
+          <div class="placeholder-note">Trying the address on your local network.</div>
+          <div class="placeholder-actions">
+            <button class="retry">Retry</button>
+            <button class="open-tab">Open in new tab ↗</button>
+          </div>
+        </div>
+      `;
+
+      const navigate = async () => {
+        const url = normalizeUrl(urlInput.value);
+        urlInput.value = url;
+        saveCameras();
+
+        placeholder.classList.remove("hidden");
+        frame.src = "about:blank";
+
+        const reachable = await checkReachability(panel);
+        if (reachable) frame.src = url;
+      };
+
+      go.addEventListener("click", navigate);
+      urlInput.addEventListener("keydown", event => {
+        if (event.key === "Enter") navigate();
+      });
+
+      reload.addEventListener("click", navigate);
+      open.addEventListener("click", () => {
+        window.open(normalizeUrl(urlInput.value), "_blank", "noopener");
+      });
+
+      placeholder.querySelector(".retry").addEventListener("click", navigate);
+      placeholder.querySelector(".open-tab").addEventListener("click", () => {
+        window.open(normalizeUrl(urlInput.value), "_blank", "noopener");
+      });
+
+      const labelChanged = () => {
+        saveCameras();
+        updateCameraDropdown();
+      };
+      labelInput.addEventListener("input", updateCameraDropdown);
+      labelInput.addEventListener("change", labelChanged);
+      labelInput.addEventListener("blur", labelChanged);
+
+      panel.addEventListener("dblclick", event => {
+        if (event.target.closest(".camera-header, .placeholder-actions")) return;
+        layoutSelect.value = "single";
+        singleCameraSelect.value = String(index);
+        applyLayout();
+      });
+
+      header.append(dot, labelInput, urlInput, go, reload, open);
+      panel.append(header, frame, placeholder);
+
+      // Start the initial load after the panel is attached.
+      setTimeout(navigate, 0);
+      return panel;
+    }
+
+    function applyLayout() {
+      const single = layoutSelect.value === "single";
+      document.body.classList.toggle("single", single);
+
+      const activeIndex = Number(singleCameraSelect.value);
+      document.querySelectorAll(".camera").forEach((panel, index) => {
+        panel.classList.toggle("active", index === activeIndex);
+      });
+
+      singleCameraSelect.disabled = !single;
+      saveUiState();
+    }
+
+    loadSavedCameras().forEach((camera, index) => {
+      grid.appendChild(createCamera(camera, index));
+    });
+
+    updateCameraDropdown();
+
+    const initialUiState = loadUiState();
+    if (initialUiState.layout === "single" || initialUiState.layout === "quad") {
+      layoutSelect.value = initialUiState.layout;
+    }
+    if (["0", "1", "2", "3"].includes(String(initialUiState.singleCamera))) {
+      singleCameraSelect.value = String(initialUiState.singleCamera);
+    }
+
+    layoutSelect.addEventListener("change", () => {
+      applyLayout();
+      layoutSelect.blur();
+    });
+    singleCameraSelect.addEventListener("change", () => {
+      applyLayout();
+      singleCameraSelect.blur();
+    });
+
+    document.getElementById("reloadAll").addEventListener("click", () => {
+      document.querySelectorAll(".camera").forEach(panel => {
+        panel.querySelector(".camera-header button").click();
+      });
+    });
+
+    document.getElementById("checkAll").addEventListener("click", () => {
+      document.querySelectorAll(".camera").forEach(panel => checkReachability(panel));
+    });
+
+    let headersHidden = Boolean(initialUiState.headersHidden);
+    document.querySelectorAll(".camera").forEach(panel => {
+      panel.classList.toggle("hide-header", headersHidden);
+    });
+    toggleHeadersButton.textContent = headersHidden ? "Show controls" : "Hide controls";
+
+    toggleHeadersButton.addEventListener("click", () => {
+      headersHidden = !headersHidden;
+      document.querySelectorAll(".camera").forEach(panel => {
+        panel.classList.toggle("hide-header", headersHidden);
+      });
+      toggleHeadersButton.textContent = headersHidden ? "Show controls" : "Hide controls";
+      saveUiState();
+    });
+
+      document.getElementById("fullscreen").addEventListener("click", () => {
+        if (
+          window.webkit &&
+          window.webkit.messageHandlers &&
+          window.webkit.messageHandlers.camGridFullscreen
+        ) {
+          window.webkit.messageHandlers.camGridFullscreen.postMessage(
+            "toggle"
+          );
+        }
+      });
+
+    document.addEventListener("keydown", event => {
+      const tag = event.target.tagName;
+      const isTextEntry = tag === "INPUT" || tag === "TEXTAREA";
+      if (isTextEntry) return;
+
+      if (["1", "2", "3", "4"].includes(event.key)) {
+        const requestedCamera = String(Number(event.key) - 1);
+        const alreadyShowingRequestedCamera =
+          layoutSelect.value === "single" &&
+          singleCameraSelect.value === requestedCamera;
+
+        if (alreadyShowingRequestedCamera) {
+          layoutSelect.value = "quad";
+        } else {
+          layoutSelect.value = "single";
+          singleCameraSelect.value = requestedCamera;
+        }
+
+        applyLayout();
+        document.activeElement?.blur();
+        event.preventDefault();
+      } else if (event.code === "Space" && tag !== "SELECT") {
+        layoutSelect.value = "quad";
+        applyLayout();
+        document.activeElement?.blur();
+        event.preventDefault();
+      }
+    });
+
+    setInterval(() => {
+      document.querySelectorAll(".camera").forEach(panel => heartbeat(panel));
+    }, HEARTBEAT_INTERVAL_MS);
+
+    applyLayout();
+  </script>
+</body>
+
+</html>

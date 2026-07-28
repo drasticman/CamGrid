@@ -1,10 +1,3 @@
-//
-//  CamGridApp.swift
-//  CamGrid
-//
-//  Created by Andy Bader on 7/27/26.
-//
-
 import SwiftUI
 
 @main
@@ -13,5 +6,6 @@ struct CamGridApp: App {
         WindowGroup {
             ContentView()
         }
+        .defaultSize(width: 1600, height: 1000)
     }
 }
